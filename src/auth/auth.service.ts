@@ -13,7 +13,7 @@ export class AuthService {
         private jwtService: JwtService
     ) { }
 
-    private async userExits(email: string) {
+    private async userExists(email: string) {
         const user = await this.authModel.findOne({ email }).exec();
         return user
     }
@@ -27,7 +27,7 @@ export class AuthService {
         if (!email || !password) {
             throw new BadRequestException("Missing reuired fieild")
         }
-        const user = await this.userExits(email)
+        const user = await this.userExists(email)
         if (!user) {
             throw new BadRequestException("Email Not exist.")
         }
@@ -50,7 +50,7 @@ export class AuthService {
         if (password.length < 6) {
             throw new BadRequestException("Password must be at least 6 characters long.")
         }
-        const user = await this.userExits(email)
+        const user = await this.userExists(email)
         if (user) {
             throw new BadRequestException("Email already exist.")
         }
@@ -65,4 +65,27 @@ export class AuthService {
         const { _id, googleId, password: _, ...userInfo } = userObj;
         return ({ user: userInfo, token: this.generateToken(_id, userInfo.email, userInfo.email) })
     }
+
+    async loginWithGoogle(data: any): Promise<{ token: string, user: { email: string, name?: string } }> {
+        const { email, googleId, name } = data;
+        let user = await this.userExists(email)
+        if (!user) {
+            user = new this.authModel({
+                email,
+                googleId,
+                name
+            })
+            await user.save()
+        } else {
+            if (!user.googleId && googleId) {
+                user.googleId = googleId;
+                await user.save();
+            }
+        }
+        return {
+            token: this.generateToken(user._id, email, name),
+            user: { email, name }
+        }
+    }
+
 }
