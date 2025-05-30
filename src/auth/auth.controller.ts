@@ -1,6 +1,7 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards, Request } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto, SignupDto } from './dto/auth.dto';
+import { AuthGuard } from '@nestjs/passport';
 
 @Controller('auth')
 export class AuthController {
@@ -15,4 +16,25 @@ export class AuthController {
   async login(@Body() data: LoginDto): Promise<{ token: string, user: { email: string, name?: string } }> {
     return await this.authService.login(data)
   }
+
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  async googleAuth() { }
+
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  async googleAuthRedirect(@Request() req) {
+    return this.authService.loginWithGoogle(req.user)
+  }
+
+  // @Get('google')
+  // @UseGuards(AuthGuard('google'))
+  // async googleAuth() { }
+
+  // @Get('google/callback')
+  // @UseGuards(AuthGuard('google'))
+  // async googleAuthRedirect(@Request() req) {
+  //   console.log('Callback data:', req.user);
+  //   return this.authService.googleLogin(req.user);
+  // }
 }
