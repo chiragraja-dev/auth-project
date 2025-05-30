@@ -13,6 +13,9 @@ export class Auth extends Document {
     googleId?: string;
 
     @Prop()
+    githubId?: string;
+
+    @Prop()
     name?: string
 }
 

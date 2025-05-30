@@ -88,4 +88,26 @@ export class AuthService {
         }
     }
 
+    async loginWithGithub(data: any): Promise<{ token: string, user: { email: string, name?: string } }> {
+        const { email, name, githubId } = data;
+        let user = await this.userExists(email)
+        if (!user) {
+            user = new this.authModel({
+                email,
+                name,
+                githubId
+            })
+            await user.save()
+        } else {
+            if (!user.githubId && githubId) {
+                user.githubId = githubId
+                await user.save()
+            }
+        }
+        return {
+            token: this.generateToken(user._id, email, name),
+            user: { email, name }
+        }
+    }
+
 }

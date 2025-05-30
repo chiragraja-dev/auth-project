@@ -27,14 +27,14 @@ export class AuthController {
     return this.authService.loginWithGoogle(req.user)
   }
 
-  // @Get('google')
-  // @UseGuards(AuthGuard('google'))
-  // async googleAuth() { }
+  @Get('github')
+  @UseGuards(AuthGuard('github'))
+  async githubAuth() { }
 
-  // @Get('google/callback')
-  // @UseGuards(AuthGuard('google'))
-  // async googleAuthRedirect(@Request() req) {
-  //   console.log('Callback data:', req.user);
-  //   return this.authService.googleLogin(req.user);
-  // }
+  @Get('github/callback')
+  @UseGuards(AuthGuard('github'))
+  async githubAuthRedirect(@Request() req) {
+    return this.authService.loginWithGithub(req.user)
+  }
+
 }
