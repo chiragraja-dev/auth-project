@@ -1,17 +1,129 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Auth } from './schemas/auth.schemas';
 import { Model } from 'mongoose'
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto, SignupDto } from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import { PasswordReset } from './schemas/password-reset.schema';
+import { EmailService } from './email.service';
 
 @Injectable()
 export class AuthService {
+    private readonly logger = new Logger(AuthService.name);
+
     constructor(
         @InjectModel(Auth.name) private authModel: Model<Auth>,
-        private jwtService: JwtService
+        @InjectModel(PasswordReset.name) private PasswordResetModel: Model<PasswordReset>,
+        private jwtService: JwtService,
+        private emailService: EmailService
     ) { }
+
+    async forgetPassword(email: string): Promise<{ success: boolean; message: string }> {
+        try {
+            const user = await this.authModel.findOne({ email }).exec();
+            if (user) {
+                const recentReset = await this.PasswordResetModel.findOne({
+                    userId: user._id,
+                    createdAt: { $gte: new Date(Date.now() - 1 * 60 * 1000) } // 15 minutes
+                }).exec()
+
+                if (recentReset) {
+                    this.logger.warn(`Rate limit exceeded for password reset: ${email}`);
+                    return {
+                        success: true,
+                        message: 'If your email is registered, you will receive password reset instructions.'
+                    }
+                }
+                const resetToken = crypto.randomBytes(32).toString('hex');
+                const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+                const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+                await this.PasswordResetModel.deleteMany({ userId: user._id });
+                await this.PasswordResetModel.create({
+                    userId: user._id,
+                    tokenHash,
+                    expiresAt
+                })
+                const emailSent = await this.emailService.sendPasswordResetEmail(email, resetToken);
+                if (emailSent) {
+                    this.logger.log(`Password reset token generated for user: ${user._id}`);
+                } else {
+                    this.logger.error(`Failed to send password reset email for user: ${user._id}`);
+                }
+            } else {
+                this.logger.warn(`Password reset requested for non-existent email: ${email}`);
+            }
+            return {
+                success: true,
+                message: 'If your email is registered, you will receive password reset instructions.'
+            }
+        } catch (error) {
+            this.logger.error('Error in forgetPassword:', error);
+            return {
+                success: true,
+                message: 'If your email is registered, you will receive password reset instructions.'
+            };
+        }
+    }
+
+    async verifyResetToken(token: string): Promise<{ valid: boolean; userId?: string }> {
+        try {
+            const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+            const resetRecord = await this.PasswordResetModel.findOne({
+                tokenHash,
+                expiresAt: { $gt: new Date() }
+            }).exec()
+
+            if (resetRecord) {
+                return { valid: true, userId: resetRecord.userId };
+            }
+            return { valid: false };
+        } catch (error) {
+            this.logger.error('Error verifying reset token:', error);
+            return { valid: false };
+        }
+    }
+
+    async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+        const { valid, userId } = await this.verifyResetToken(token)
+
+        if (!valid || !userId) {
+            return { success: false, message: 'Invalid or expired token' };
+        }
+
+        const user = await this.authModel.findById(userId)
+        if (!user) {
+            return { success: false, message: 'User not found' };
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        user.password = hashedPassword;
+        await user.save()
+        await this.PasswordResetModel.deleteOne({ userId });
+        return { success: true, message: 'Password has been reset successfully' };
+
+    }
+
+
+
+    async cleanupExpiredTokens(): Promise<void> {
+        try {
+            const result = await this.PasswordResetModel
+                .deleteMany({ expiresAt: { $lt: new Date() } })
+                .exec();
+
+            if (result.deletedCount > 0) {
+                this.logger.log(`Cleaned up ${result.deletedCount} expired reset tokens`);
+            }
+        } catch (error) {
+            this.logger.error('Error cleaning up expired tokens:', error);
+        }
+    }
+
+
+
 
     private async userExists(email: string) {
         const user = await this.authModel.findOne({ email }).exec();

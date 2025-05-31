@@ -8,10 +8,15 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GithubStartegy } from './strategies/github.strategy';
+import { EmailService } from './email.service';
+import { PasswordReset, PasswordResetSchema } from './schemas/password-reset.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Auth.name, schema: AuthSchema }]),
+    MongooseModule.forFeature([
+      { name: Auth.name, schema: AuthSchema },
+      { name: PasswordReset.name, schema: PasswordResetSchema }
+    ]),
     PassportModule.register({ defaultStrategy: 'jwt', session: true }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -23,7 +28,7 @@ import { GithubStartegy } from './strategies/github.strategy';
     })
   ],
   controllers: [AuthController],
-  providers: [AuthService, GoogleStrategy, GithubStartegy],
+  providers: [AuthService, EmailService, GoogleStrategy, GithubStartegy],
   exports: [AuthService]
 })
 export class AuthModule { }
