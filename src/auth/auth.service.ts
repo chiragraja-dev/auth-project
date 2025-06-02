@@ -106,8 +106,6 @@ export class AuthService {
 
     }
 
-
-
     async cleanupExpiredTokens(): Promise<void> {
         try {
             const result = await this.PasswordResetModel
@@ -121,9 +119,6 @@ export class AuthService {
             this.logger.error('Error cleaning up expired tokens:', error);
         }
     }
-
-
-
 
     private async userExists(email: string) {
         const user = await this.authModel.findOne({ email }).exec();
@@ -154,29 +149,70 @@ export class AuthService {
         };
     }
 
-    async signup(data: SignupDto): Promise<{ token: string, user: { email: string, name?: string } }> {
-        const { email, name, password } = data
-        if (!email || !name || !password) {
-            throw new BadRequestException("Missing reuired fieild")
-        }
-        if (password.length < 6) {
-            throw new BadRequestException("Password must be at least 6 characters long.")
-        }
-        const user = await this.userExists(email)
-        if (user) {
-            throw new BadRequestException("Email already exist.")
-        }
-        const hashedPassword = await bcrypt.hash(password, 10)
-        const userData = new this.authModel({
-            email,
-            password: hashedPassword,
-            name
-        })
-        await userData.save()
-        const userObj = userData?.toObject();
-        const { _id, googleId, password: _, ...userInfo } = userObj;
-        return ({ user: userInfo, token: this.generateToken(_id, userInfo.email, userInfo.email) })
+    generateOtp(): string {
+        return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
     }
+
+    async verifyOtp(email: string, otp: string): Promise<{ token: string, email: string, name: string }> {
+        const user = await this.authModel.findOne({ email });
+        if (!user) {
+            throw new BadRequestException("User not found.");
+        }
+        if (user?.isVerified) {
+            throw new BadRequestException("User already verified.");
+        }
+        if (user.otp !== otp || user?.otpExpiresAt && (new Date() > new Date(user?.otpExpiresAt))) {
+            throw new BadRequestException("Invalid or expired OTP.");
+        }
+
+        user.isVerified = true;
+        user.otp = undefined;
+        user.otpExpiresAt = undefined;
+        await user.save();
+
+        const token = this.generateToken(user._id, user.email, user.name ?? "")
+        return { token, email: user.email, name: user.name ?? "" };
+    }
+
+    async signup(data: SignupDto): Promise<{ message: string, email: string, name: string }> {
+        try {
+
+            const { email, name, password } = data
+            if (!email || !name || !password) {
+                throw new BadRequestException("Missing reuired fieild")
+            }
+            if (password.length < 6) {
+                throw new BadRequestException("Password must be at least 6 characters long.")
+            }
+            const user = await this.userExists(email)
+            if (user) {
+                throw new BadRequestException("Email already exist.")
+            }
+            const hashedPassword = await bcrypt.hash(password, 10)
+            const otp = this.generateOtp();
+
+            const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+            const userData = new this.authModel({
+                email,
+                password: hashedPassword,
+                name,
+                otp,
+                otpExpiresAt,
+                isVerified: false,
+            })
+            await userData.save()
+            await this.emailService.sendOtpEmail(email, name, otp)
+            return { message: 'Signup successful. OTP sent to your email.', email, name };
+        } catch (error) {
+            console.log(error.message)
+            return { message: error.message, email: "", name: "" };
+
+        }
+    }
+
+
+
 
     async loginWithGoogle(data: any): Promise<{ token: string, user: { email: string, name?: string } }> {
         const { email, googleId, name } = data;

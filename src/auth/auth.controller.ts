@@ -10,7 +10,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
   @Post('signup')
-  async signup(@Body() data: SignupDto): Promise<{ token: string, user: { email: string, name?: string } }> {
+  async signup(@Body() data: SignupDto): Promise<{ message: string, email: string, name: string }> {
     return await this.authService.signup(data)
   }
 
@@ -53,6 +53,11 @@ export class AuthController {
   @Post('reset-password')
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.newPassword)
+  }
+
+  @Post('verify')
+  async verifyOtp(@Body() req: { email: string, otp: string }) {
+    return this.authService.verifyOtp(req.email, req.otp)
   }
 
 }

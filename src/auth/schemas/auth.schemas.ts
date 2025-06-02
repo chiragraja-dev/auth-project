@@ -17,6 +17,15 @@ export class Auth extends Document {
 
     @Prop()
     name?: string
+
+    @Prop({ default: false })
+    isVerified: boolean;
+
+    @Prop()
+    otp?: string;
+
+    @Prop()
+    otpExpiresAt?: Date;
 }
 
 export const AuthSchema = SchemaFactory.createForClass(Auth);

@@ -78,4 +78,50 @@ export class EmailService {
             return false;
         }
     }
+    private async generateOtp(length: number = 6): Promise<string> {
+        const digits = '0123456789';
+        let otp = '';
+        for (let i = 0; i < length; i++) {
+            otp += digits[Math.floor(Math.random() * 10)];
+        }
+        return otp;
+    }
+
+    private async getOtpEmailTemplate(otp: string, userName: string): Promise<string> {
+        return `
+    <div style="max-width: 600px; margin: auto; padding: 30px; background-color: #ffffff; border-radius: 10px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);">
+      <div style="text-align: center;">
+        <h2 style="color: #2f80ed;">Verify Your Email</h2>
+        <p style="font-size: 16px; color: #333;">Hello <strong>${userName}</strong>,</p>
+        <p style="font-size: 15px; color: #555;">Please use the following One-Time Password (OTP) to verify your email address:</p>
+        <div style="margin: 20px 0;">
+          <span style="display: inline-block; font-size: 28px; font-weight: bold; letter-spacing: 8px; color: #2f80ed; background-color: #f0f4ff; padding: 12px 24px; border-radius: 8px;">${otp}</span>
+        </div>
+        <p style="font-size: 14px; color: #777;">This code will expire in <strong>10 minutes</strong>.</p>
+        <p style="font-size: 14px; color: #999; margin-top: 30px;">If you didn't request this, you can safely ignore this email.</p>
+      </div>
+      <hr style="margin: 40px 0; border: none; border-top: 1px solid #eee;" />
+      <div style="text-align: center; font-size: 13px; color: #aaa;">
+        &copy; ${new Date().getFullYear()} YourApp. All rights reserved.
+      </div>
+    </div>
+    `;
+    }
+
+    async sendOtpEmail(email: string, name: string, otp: string): Promise<boolean> {
+        try {
+            const mailOption = {
+                from: `"${this.configService.get<string>('APP_NAME') || 'Your App'}" <${this.configService.get<string>('SMTP_FROM') || this.configService.get<string>('SMTP_USER')}>`,
+                to: email,
+                subject: 'Verify Your Email',
+                html: (await (this.getOtpEmailTemplate(otp, name))).toString(),
+            }
+            this.transporter.sendMail(mailOption)
+            this.Logger.log(`Password reset email sent to: ${email}`);
+            return true
+
+        } catch (error) {
+            return false
+        }
+    }
 }
